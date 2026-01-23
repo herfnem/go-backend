@@ -10,6 +10,7 @@ import (
 	"learn/internal/database"
 	"learn/internal/models"
 	"learn/internal/response"
+	"learn/internal/validator"
 	"learn/pkg/jwt"
 )
 
@@ -20,13 +21,8 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Username == "" || req.Email == "" || req.Password == "" {
-		response.BadRequest(w, "Username, email, and password are required")
-		return
-	}
-
-	if len(req.Password) < 6 {
-		response.BadRequest(w, "Password must be at least 6 characters")
+	if err := validator.Validate(req); err != nil {
+		response.BadRequest(w, validator.FormatErrorsString(err))
 		return
 	}
 
@@ -73,8 +69,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Email == "" || req.Password == "" {
-		response.BadRequest(w, "Email and password are required")
+	if err := validator.Validate(req); err != nil {
+		response.BadRequest(w, validator.FormatErrorsString(err))
 		return
 	}
 

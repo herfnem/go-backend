@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"learn/internal/middleware"
 	"learn/internal/response"
 )
 
@@ -20,9 +21,14 @@ func GetPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func CreatePost(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(int64)
+	user, ok := middleware.GetUserFromContext(r)
+	if !ok {
+		response.Unauthorized(w, "User not found in context")
+		return
+	}
 
 	response.Created(w, "Post created successfully", map[string]any{
-		"user_id": userID,
+		"user_id":  user.ID,
+		"username": user.Username,
 	})
 }

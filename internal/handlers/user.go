@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"learn/internal/database"
+	"learn/internal/middleware"
 	"learn/internal/models"
 	"learn/internal/response"
 )
@@ -55,20 +56,9 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetProfile(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(int64)
-
-	var user models.User
-	err := database.DB.QueryRow(
-		"SELECT id, username, email, created_at FROM users WHERE id = ?",
-		userID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
-
-	if err == sql.ErrNoRows {
-		response.NotFound(w, "User not found")
-		return
-	}
-	if err != nil {
-		response.InternalError(w, "Database error")
+	user, ok := middleware.GetUserFromContext(r)
+	if !ok {
+		response.Unauthorized(w, "User not found in context")
 		return
 	}
 

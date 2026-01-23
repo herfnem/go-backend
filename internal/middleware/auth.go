@@ -2,9 +2,12 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 
+	"learn/internal/database"
+	"learn/internal/models"
 	"learn/internal/response"
 	"learn/pkg/jwt"
 )
@@ -12,9 +15,7 @@ import (
 type contextKey string
 
 const (
-	UserIDKey   contextKey = "user_id"
-	UsernameKey contextKey = "username"
-	EmailKey    contextKey = "email"
+	UserKey contextKey = "user"
 )
 
 func Auth(next http.Handler) http.Handler {
@@ -38,10 +39,30 @@ func Auth(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
-		ctx = context.WithValue(ctx, "username", claims.Username)
-		ctx = context.WithValue(ctx, "email", claims.Email)
+		// Fetch fresh user data from database
+		var user models.User
+		err = database.DB.QueryRow(
+			"SELECT id, username, email, created_at FROM users WHERE id = ?",
+			claims.UserID,
+		).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
 
+		if err == sql.ErrNoRows {
+			response.Unauthorized(w, "User not found")
+			return
+		}
+		if err != nil {
+			response.InternalError(w, "Database error")
+			return
+		}
+
+		// Inject full user object into context
+		ctx := context.WithValue(r.Context(), UserKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// GetUserFromContext helper to retrieve user from context
+func GetUserFromContext(r *http.Request) (models.User, bool) {
+	user, ok := r.Context().Value(UserKey).(models.User)
+	return user, ok
 }
