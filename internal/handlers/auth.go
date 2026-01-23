@@ -9,29 +9,30 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"learn/internal/database"
 	"learn/internal/models"
+	"learn/internal/response"
 	"learn/pkg/jwt"
 )
 
 func Signup(w http.ResponseWriter, r *http.Request) {
 	var req models.SignupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "Invalid request body", http.StatusBadRequest)
+		response.BadRequest(w, "Invalid request body")
 		return
 	}
 
 	if req.Username == "" || req.Email == "" || req.Password == "" {
-		jsonError(w, "Username, email, and password are required", http.StatusBadRequest)
+		response.BadRequest(w, "Username, email, and password are required")
 		return
 	}
 
 	if len(req.Password) < 6 {
-		jsonError(w, "Password must be at least 6 characters", http.StatusBadRequest)
+		response.BadRequest(w, "Password must be at least 6 characters")
 		return
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		jsonError(w, "Failed to process password", http.StatusInternalServerError)
+		response.InternalError(w, "Failed to process password")
 		return
 	}
 
@@ -40,7 +41,7 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 		req.Username, req.Email, string(hashedPassword),
 	)
 	if err != nil {
-		jsonError(w, "User already exists or database error", http.StatusConflict)
+		response.Conflict(w, "User already exists")
 		return
 	}
 
@@ -48,7 +49,7 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 
 	token, err := jwt.GenerateToken(userID, req.Username, req.Email)
 	if err != nil {
-		jsonError(w, "Failed to generate token", http.StatusInternalServerError)
+		response.InternalError(w, "Failed to generate token")
 		return
 	}
 
@@ -59,24 +60,21 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: time.Now(),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(models.AuthResponse{
-		Token:   token,
-		Message: "User created successfully",
-		User:    user,
+	response.Created(w, "User created successfully", map[string]any{
+		"token": token,
+		"user":  user,
 	})
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "Invalid request body", http.StatusBadRequest)
+		response.BadRequest(w, "Invalid request body")
 		return
 	}
 
 	if req.Email == "" || req.Password == "" {
-		jsonError(w, "Email and password are required", http.StatusBadRequest)
+		response.BadRequest(w, "Email and password are required")
 		return
 	}
 
@@ -87,37 +85,29 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.CreatedAt)
 
 	if err == sql.ErrNoRows {
-		jsonError(w, "Invalid email or password", http.StatusUnauthorized)
+		response.Unauthorized(w, "Invalid email or password")
 		return
 	}
 	if err != nil {
-		jsonError(w, "Database error", http.StatusInternalServerError)
+		response.InternalError(w, "Database error")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		jsonError(w, "Invalid email or password", http.StatusUnauthorized)
+		response.Unauthorized(w, "Invalid email or password")
 		return
 	}
 
 	token, err := jwt.GenerateToken(user.ID, user.Username, user.Email)
 	if err != nil {
-		jsonError(w, "Failed to generate token", http.StatusInternalServerError)
+		response.InternalError(w, "Failed to generate token")
 		return
 	}
 
-	user.Password = "" // Clear password before sending response
+	user.Password = ""
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(models.AuthResponse{
-		Token:   token,
-		Message: "Login successful",
-		User:    user,
+	response.Success(w, "Login successful", map[string]any{
+		"token": token,
+		"user":  user,
 	})
-}
-
-func jsonError(w http.ResponseWriter, message string, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

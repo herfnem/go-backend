@@ -5,6 +5,7 @@ import (
 
 	"learn/internal/handlers"
 	"learn/internal/middleware"
+	"learn/internal/response"
 )
 
 func Setup() http.Handler {
@@ -34,6 +35,7 @@ func Setup() http.Handler {
 }
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"healthy"}`))
+	response.Success(w, "Service is healthy", map[string]string{
+		"status": "healthy",
+	})
 }

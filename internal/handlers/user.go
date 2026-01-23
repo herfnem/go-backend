@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 
 	"learn/internal/database"
 	"learn/internal/models"
+	"learn/internal/response"
 )
 
 func GetUser(w http.ResponseWriter, r *http.Request) {
@@ -19,22 +19,21 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
 
 	if err == sql.ErrNoRows {
-		jsonError(w, "User not found", http.StatusNotFound)
+		response.NotFound(w, "User not found")
 		return
 	}
 	if err != nil {
-		jsonError(w, "Database error", http.StatusInternalServerError)
+		response.InternalError(w, "Database error")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	response.Success(w, "User retrieved successfully", user)
 }
 
 func GetUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := database.DB.Query("SELECT id, username, email, created_at FROM users")
 	if err != nil {
-		jsonError(w, "Database error", http.StatusInternalServerError)
+		response.InternalError(w, "Database error")
 		return
 	}
 	defer rows.Close()
@@ -52,8 +51,7 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 		users = []models.User{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(users)
+	response.Success(w, "Users retrieved successfully", users)
 }
 
 func GetProfile(w http.ResponseWriter, r *http.Request) {
@@ -66,14 +64,13 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
 
 	if err == sql.ErrNoRows {
-		jsonError(w, "User not found", http.StatusNotFound)
+		response.NotFound(w, "User not found")
 		return
 	}
 	if err != nil {
-		jsonError(w, "Database error", http.StatusInternalServerError)
+		response.InternalError(w, "Database error")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	response.Success(w, "Profile retrieved successfully", user)
 }
