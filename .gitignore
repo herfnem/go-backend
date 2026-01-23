@@ -1,0 +1,19 @@
+# Binaries
+server
+*.exe
+
+# Environment files
+.env
+
+# Database
+*.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
