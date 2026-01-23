@@ -11,7 +11,7 @@ import (
 func Setup() http.Handler {
 	mux := http.NewServeMux()
 
-	// Public routes (no authentication required)
+	// Public routes
 	mux.HandleFunc("GET /", handlers.Home)
 	mux.HandleFunc("GET /health", healthCheck)
 
@@ -19,16 +19,29 @@ func Setup() http.Handler {
 	mux.HandleFunc("POST /auth/signup", handlers.Signup)
 	mux.HandleFunc("POST /auth/login", handlers.Login)
 
-	// Public post routes
-	mux.HandleFunc("GET /posts/{slug}", handlers.GetPost)
-
 	// Public user routes
 	mux.HandleFunc("GET /users", handlers.GetUsers)
 	mux.HandleFunc("GET /users/{id}", handlers.GetUser)
 
-	// Protected routes (require authentication)
+	// Public post routes
+	mux.HandleFunc("GET /posts/{slug}", handlers.GetPost)
+
+	// Snippet routes (public)
+	mux.HandleFunc("POST /snippets", handlers.CreateSnippet)
+	mux.HandleFunc("GET /s/{hash}", handlers.GetSnippet)
+	mux.HandleFunc("POST /s/{hash}", handlers.GetSnippet) // POST for password-protected
+
+	// Protected routes
 	mux.Handle("GET /profile", middleware.Auth(http.HandlerFunc(handlers.GetProfile)))
 	mux.Handle("POST /posts", middleware.Auth(http.HandlerFunc(handlers.CreatePost)))
+
+	// Monitor routes (protected)
+	mux.Handle("GET /monitors", middleware.Auth(http.HandlerFunc(handlers.GetMonitors)))
+	mux.Handle("POST /monitors", middleware.Auth(http.HandlerFunc(handlers.CreateMonitor)))
+	mux.Handle("GET /monitors/{id}", middleware.Auth(http.HandlerFunc(handlers.GetMonitor)))
+	mux.Handle("DELETE /monitors/{id}", middleware.Auth(http.HandlerFunc(handlers.DeleteMonitor)))
+	mux.Handle("PATCH /monitors/{id}/toggle", middleware.Auth(http.HandlerFunc(handlers.ToggleMonitor)))
+	mux.Handle("GET /dashboard", middleware.Auth(http.HandlerFunc(handlers.GetDashboard)))
 
 	// Apply global logging middleware
 	return middleware.Logging(mux)
