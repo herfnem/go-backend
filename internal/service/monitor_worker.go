@@ -1,14 +1,17 @@
-package worker
+package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
-	"learn/internal/database"
-	"learn/internal/handlers"
+	"github.com/google/uuid"
+	"learn/internal/models"
+	"learn/internal/repository"
 )
 
 type MonitorWorker struct {
@@ -16,9 +19,11 @@ type MonitorWorker struct {
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
 	httpClient *http.Client
+	monitors   repository.MonitorRepository
+	snippets   *SnippetService
 }
 
-func NewMonitorWorker() *MonitorWorker {
+func NewMonitorWorker(monitors repository.MonitorRepository, snippets *SnippetService) *MonitorWorker {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &MonitorWorker{
 		ctx:    ctx,
@@ -26,20 +31,20 @@ func NewMonitorWorker() *MonitorWorker {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+		monitors: monitors,
+		snippets: snippets,
 	}
 }
 
 func (w *MonitorWorker) Start() {
 	log.Println("Monitor worker started")
 
-	// Run monitor checks every minute
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 
-		// Run immediately on start
 		w.checkAllMonitors()
 
 		for {
@@ -53,7 +58,6 @@ func (w *MonitorWorker) Start() {
 		}
 	}()
 
-	// Run snippet cleanup every hour
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
@@ -65,7 +69,11 @@ func (w *MonitorWorker) Start() {
 			case <-w.ctx.Done():
 				return
 			case <-ticker.C:
-				deleted := handlers.DeleteExpiredSnippets()
+				deleted, err := w.snippets.DeleteExpired(w.ctx)
+				if err != nil {
+					log.Printf("Error cleaning expired snippets: %v", err)
+					continue
+				}
 				if deleted > 0 {
 					log.Printf("Cleaned up %d expired snippets", deleted)
 				}
@@ -81,30 +89,10 @@ func (w *MonitorWorker) Stop() {
 }
 
 func (w *MonitorWorker) checkAllMonitors() {
-	rows, err := database.DB.Query(`
-		SELECT id, url, interval_seconds
-		FROM monitors
-		WHERE is_active = 1
-	`)
+	monitors, err := w.monitors.ListActive(w.ctx)
 	if err != nil {
 		log.Printf("Error fetching monitors: %v", err)
 		return
-	}
-	defer rows.Close()
-
-	type monitorInfo struct {
-		ID       int64
-		URL      string
-		Interval int
-	}
-
-	var monitors []monitorInfo
-	for rows.Next() {
-		var m monitorInfo
-		if err := rows.Scan(&m.ID, &m.URL, &m.Interval); err != nil {
-			continue
-		}
-		monitors = append(monitors, m)
 	}
 
 	if len(monitors) == 0 {
@@ -113,36 +101,33 @@ func (w *MonitorWorker) checkAllMonitors() {
 
 	log.Printf("Checking %d monitors...", len(monitors))
 
-	// Check monitors concurrently using goroutines
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 10) // Limit concurrent checks to 10
+	semaphore := make(chan struct{}, 10)
 
-	for _, m := range monitors {
-		// Check if this monitor needs to be checked based on interval
-		var lastCheck time.Time
-		err := database.DB.QueryRow(
-			"SELECT checked_at FROM monitor_logs WHERE monitor_id = ? ORDER BY checked_at DESC LIMIT 1",
-			m.ID,
-		).Scan(&lastCheck)
-
-		if err == nil && time.Since(lastCheck) < time.Duration(m.Interval)*time.Second {
-			continue // Skip, not time yet
+	for _, monitor := range monitors {
+		lastCheck, err := w.monitors.GetLastCheck(w.ctx, monitor.ID)
+		if err == nil && time.Since(lastCheck) < time.Duration(monitor.IntervalSeconds)*time.Second {
+			continue
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("Error fetching last check for monitor %d: %v", monitor.ID, err)
+			continue
 		}
 
 		wg.Add(1)
-		go func(monitor monitorInfo) {
+		go func(m models.MonitorCheck) {
 			defer wg.Done()
-			semaphore <- struct{}{}        // Acquire
-			defer func() { <-semaphore }() // Release
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
 
-			w.checkMonitor(monitor.ID, monitor.URL)
-		}(m)
+			w.checkMonitor(m.ID, m.URL)
+		}(monitor)
 	}
 
 	wg.Wait()
 }
 
-func (w *MonitorWorker) checkMonitor(monitorID int64, url string) {
+func (w *MonitorWorker) checkMonitor(monitorID string, url string) {
 	start := time.Now()
 
 	req, err := http.NewRequestWithContext(w.ctx, "GET", url, nil)
@@ -170,13 +155,17 @@ func (w *MonitorWorker) checkMonitor(monitorID int64, url string) {
 	w.logResult(monitorID, status, resp.StatusCode, responseTime, "")
 }
 
-func (w *MonitorWorker) logResult(monitorID int64, status string, statusCode int, responseTimeMs int64, errorMsg string) {
-	_, err := database.DB.Exec(`
-		INSERT INTO monitor_logs (monitor_id, status, status_code, response_time_ms, error_message)
-		VALUES (?, ?, ?, ?, ?)
-	`, monitorID, status, statusCode, responseTimeMs, errorMsg)
+func (w *MonitorWorker) logResult(monitorID string, status string, statusCode int, responseTimeMs int64, errorMsg string) {
+	logEntry := models.MonitorLog{
+		ID:             uuid.NewString(),
+		MonitorID:      monitorID,
+		Status:         status,
+		StatusCode:     statusCode,
+		ResponseTimeMs: responseTimeMs,
+		ErrorMessage:   errorMsg,
+	}
 
-	if err != nil {
+	if err := w.monitors.CreateLog(w.ctx, logEntry); err != nil {
 		log.Printf("Error logging monitor result: %v", err)
 	}
 }

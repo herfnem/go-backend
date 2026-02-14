@@ -1,18 +1,37 @@
 # Binaries
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
 
-# Environment files
-.env
+# Go work and cache
+bin/
+dist/
+tmp/
+vendor/
+coverage.out
+coverage.txt
+*.cover
 
-# Database
+# Build artifacts
+*.log
+*.pid
 *.db
+*.sqlite
 
-# IDE
+# Editor and OS
+.DS_Store
+Thumbs.db
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# Environment
+.env
+
+# Swagger output
+docs/

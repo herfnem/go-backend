@@ -48,6 +48,8 @@ func formatError(e validator.FieldError) string {
 		return fmt.Sprintf("%s must be at most %s characters", field, e.Param())
 	case "alphanum":
 		return fmt.Sprintf("%s must contain only letters and numbers", field)
+	case "url":
+		return fmt.Sprintf("%s must be a valid URL", field)
 	default:
 		return fmt.Sprintf("%s is invalid", field)
 	}

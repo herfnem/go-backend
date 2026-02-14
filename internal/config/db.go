@@ -1,56 +1,47 @@
-package database
+package config
 
 import (
+	"context"
 	"database/sql"
-	"log"
 
-	_ "github.com/mattn/go-sqlite3"
-	"learn/internal/config"
+	_ "modernc.org/sqlite"
 )
 
-var DB *sql.DB
-
-func Init() {
-	var err error
-	DB, err = sql.Open("sqlite3", config.AppConfig.DBPath)
+func OpenDB(dbPath string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		return nil, err
 	}
 
-	if err = DB.Ping(); err != nil {
-		log.Fatal("Failed to ping database:", err)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 
-	createTables()
-	log.Println("Database initialized successfully")
+	return db, nil
 }
 
-func createTables() {
+func Migrate(ctx context.Context, db *sql.DB) error {
 	tables := []string{
-		// Users table
 		`CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id TEXT PRIMARY KEY,
 			username TEXT NOT NULL UNIQUE,
 			email TEXT NOT NULL UNIQUE,
 			password TEXT NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`,
-
-		// Posts table
 		`CREATE TABLE IF NOT EXISTS posts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id TEXT PRIMARY KEY,
 			title TEXT NOT NULL,
 			slug TEXT NOT NULL UNIQUE,
 			content TEXT,
-			user_id INTEGER,
+			user_id TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (user_id) REFERENCES users(id)
 		);`,
-
-		// Monitors table (Uptime Ninja)
 		`CREATE TABLE IF NOT EXISTS monitors (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER NOT NULL,
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
 			name TEXT NOT NULL,
 			url TEXT NOT NULL,
 			interval_seconds INTEGER DEFAULT 300,
@@ -58,11 +49,9 @@ func createTables() {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (user_id) REFERENCES users(id)
 		);`,
-
-		// Monitor logs table
 		`CREATE TABLE IF NOT EXISTS monitor_logs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			monitor_id INTEGER NOT NULL,
+			id TEXT PRIMARY KEY,
+			monitor_id TEXT NOT NULL,
 			status TEXT NOT NULL,
 			status_code INTEGER,
 			response_time_ms INTEGER,
@@ -70,10 +59,8 @@ func createTables() {
 			checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
 		);`,
-
-		// Snippets table (Pastebin)
 		`CREATE TABLE IF NOT EXISTS snippets (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id TEXT PRIMARY KEY,
 			hash TEXT NOT NULL UNIQUE,
 			content TEXT NOT NULL,
 			password TEXT,
@@ -84,14 +71,10 @@ func createTables() {
 	}
 
 	for _, table := range tables {
-		if _, err := DB.Exec(table); err != nil {
-			log.Fatal("Failed to create table:", err)
+		if _, err := db.ExecContext(ctx, table); err != nil {
+			return err
 		}
 	}
-}
 
-func Close() {
-	if DB != nil {
-		DB.Close()
-	}
+	return nil
 }

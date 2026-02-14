@@ -3,8 +3,8 @@ package models
 import "time"
 
 type Monitor struct {
-	ID              int64     `json:"id"`
-	UserID          int64     `json:"user_id"`
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
 	Name            string    `json:"name"`
 	URL             string    `json:"url"`
 	IntervalSeconds int       `json:"interval_seconds"`
@@ -14,8 +14,8 @@ type Monitor struct {
 }
 
 type MonitorLog struct {
-	ID             int64     `json:"id"`
-	MonitorID      int64     `json:"monitor_id"`
+	ID             string    `json:"id"`
+	MonitorID      string    `json:"monitor_id"`
 	Status         string    `json:"status"`
 	StatusCode     int       `json:"status_code"`
 	ResponseTimeMs int64     `json:"response_time_ms"`
@@ -23,14 +23,27 @@ type MonitorLog struct {
 	CheckedAt      time.Time `json:"checked_at"`
 }
 
-type CreateMonitorRequest struct {
-	Name            string `json:"name" validate:"required,min=1,max=100"`
-	URL             string `json:"url" validate:"required,url"`
-	IntervalSeconds int    `json:"interval_seconds" validate:"omitempty,min=60,max=86400"`
-}
-
 type MonitorWithLogs struct {
 	Monitor Monitor      `json:"monitor"`
 	Logs    []MonitorLog `json:"logs"`
 	Uptime  float64      `json:"uptime_percentage"`
+}
+
+type MonitorStats struct {
+	Total  int
+	Active int
+	Up     int
+	Down   int
+}
+
+type RecentMonitorLog struct {
+	MonitorLog
+	MonitorName string `json:"monitor_name"`
+	MonitorURL  string `json:"monitor_url"`
+}
+
+type MonitorCheck struct {
+	ID              string
+	URL             string
+	IntervalSeconds int
 }
